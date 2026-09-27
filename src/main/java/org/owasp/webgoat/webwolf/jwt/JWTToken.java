@@ -85,6 +85,12 @@ public class JWTToken {
 
     // Only sign when valid header and payload
     if (!headers.isEmpty() && !payload.isEmpty() && hasText(secretKey)) {
+      if (!payload.containsKey("exp")) {
+        payload.put("exp", (System.currentTimeMillis() / 1000L) + 3600L);
+      }
+      String payloadWithExpiration = write(payloadAsString, payload);
+      builder.payload(payloadWithExpiration);
+      jws.setPayload(payloadWithExpiration);
       jws.setDoKeyValidation(false);
       jws.setKey(new HmacKey(secretKey.getBytes(UTF_8)));
       try {
