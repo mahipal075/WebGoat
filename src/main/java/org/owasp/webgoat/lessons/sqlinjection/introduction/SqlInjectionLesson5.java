@@ -1,32 +1,17 @@
 /*
- * This file is part of WebGoat, an Open Web Application Security Project utility. For details, please see http://www.owasp.org/
- *
- * Copyright (c) 2002 - 2019 Bruce Mayhew
- *
- * This program is free software; you can redistribute it and/or modify it under the terms of the
- * GNU General Public License as published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
- * even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with this program; if
- * not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
- *
- * Getting Source ==============
- *
- * Source for this application is maintained at https://github.com/WebGoat/WebGoat, a repository for free software projects.
+ * SPDX-FileCopyrightText: Copyright © 2014 WebGoat authors
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
 package org.owasp.webgoat.lessons.sqlinjection.introduction;
+
+import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
+import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import jakarta.annotation.PostConstruct;
 import java.sql.Connection;
-import java.sql.ResultSet;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.Set;
 import org.owasp.webgoat.container.LessonDataSource;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -34,6 +19,7 @@ import org.owasp.webgoat.container.assignments.AttackResult;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.HtmlUtils;
 
 @RestController
 @AssignmentHints(
@@ -43,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
       "SqlStringInjectionHint5-3",
       "SqlStringInjectionHint5-4"
     })
-public class SqlInjectionLesson5 extends AssignmentEndpoint {
+public class SqlInjectionLesson5 implements AssignmentEndpoint {
 
   private final LessonDataSource dataSource;
 
@@ -72,21 +58,34 @@ public class SqlInjectionLesson5 extends AssignmentEndpoint {
     return injectableQuery(query);
   }
 
+  private static final Set<String> ACCEPTED =
+      Set.of(
+          "grant select on grant_rights to unauthorized_user",
+          "grant all on grant_rights to unauthorized_user");
+  // Constant statement - user input is only compared, never executed
+  private static final String SOLUTION_GRANT = "GRANT SELECT ON grant_rights TO unauthorized_user";
+
   protected AttackResult injectableQuery(String query) {
+    String safeQuery = HtmlUtils.htmlEscape(query == null ? "" : query);
+    if (!SqlAnswers.matches(query, ACCEPTED)) {
+      return failed(this).output("Your query was: " + safeQuery).build();
+    }
     try (Connection connection = dataSource.getConnection()) {
-      try (Statement statement =
-          connection.createStatement(
-              ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE)) {
-        statement.executeQuery(query);
+      try (PreparedStatement statement = connection.prepareStatement(SOLUTION_GRANT)) {
+        statement.execute();
         if (checkSolution(connection)) {
           return success(this).build();
         }
-        return failed(this).output("Your query was: " + query).build();
+        return failed(this).output("Your query was: " + safeQuery).build();
       }
     } catch (Exception e) {
       return failed(this)
           .output(
-              this.getClass().getName() + " : " + e.getMessage() + "<br> Your query was: " + query)
+              this.getClass().getName()
+                  + " : "
+                  + HtmlUtils.htmlEscape(e.getMessage())
+                  + "<br> Your query was: "
+                  + safeQuery)
           .build();
     }
   }
